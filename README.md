@@ -14,12 +14,12 @@
 
 
 # Update News
-- **[2024/12/02]** Our [paper](https://arxiv.org/abs/2412.01981) comes alive! We release our [implicit PRMs]() trained with DPO and CE respectively, **the best PRMs trained from Llama-3.1-Instruct to date**, and we also open-source the corresponding [training dataset](), the **response-level** rollouts to UltraInteract instructions sampled by Llama-3.1-8B-Instruct.
+- **[2024/12/02]** Our [paper](https://arxiv.org/abs/2412.01981) comes alive! We release our [implicit PRMs](https://huggingface.co/collections/Windy0822/implicitprm-675033e6b3719046c13e2e48) trained with DPO and CE respectively, **the best PRMs trained from Llama-3.1-Instruct to date**, and we also open-source the corresponding [training dataset](https://huggingface.co/datasets/Windy0822/ultrainteract_math_rollout), the **response-level** rollouts to UltraInteract instructions sampled by Llama-3.1-8B-Instruct.
 
 # Links
 - 📜 [Paper](https://arxiv.org/abs/2412.01981)
-- 🤗 [Implicit PRM Collection]()
-- 🤗 [Response-level Dataset]()
+- 🤗 [Implicit PRM](https://huggingface.co/collections/Windy0822/implicitprm-675033e6b3719046c13e2e48)
+- 🤗 [Response-level Dataset](https://huggingface.co/datasets/Windy0822/ultrainteract_math_rollout)
 
 # Introduction
 
@@ -35,7 +35,7 @@ Therefore, **we can indeed obtain PRMs, or more fine-grained token-level RMs, si
 # Evaluation
 
 We evaluate Implicit PRM with best-of-N sampling. We generate testsets on MATH500 with three generation models. 
-We implement Math-Shepherd and AutoPSV and train on [our dataset](). We also compare to six off-the-shelf ORMs and PRM, including the (previous) SOTA PRMs of Llama-3.1 class, RLHFlow/Llama3.1-8B-PRM-Mistral-Data and RLHFlow/Llama3.1-8B-PRM-Deepseek-Data.
+We implement Math-Shepherd and AutoPSV and train on [our dataset](https://huggingface.co/datasets/Windy0822/ultrainteract_math_rollout). We also compare to six off-the-shelf ORMs and PRM, including the (previous) SOTA PRMs of Llama-3.1 class, RLHFlow/Llama3.1-8B-PRM-Mistral-Data and RLHFlow/Llama3.1-8B-PRM-Deepseek-Data.
 We instantiate our proposition using various reward modeling objectives, including DPO, NCA, KTO, and cross-entropy (CE). Particularly, given esponse-level label $l$, CE is implemented as follows:
 
 ```math
@@ -46,7 +46,7 @@ We instantiate our proposition using various reward modeling objectives, includi
 
 <img src="figs/main_exp.png" width="800px">
 
-It is noteworthy that our implicit PRM (DPO) achieves overall best performance, surpassing the previous SOTA of this backbone. Our implicit PRM (CE) also outperforms all baselines except RLHFlow-8B-Mistral-Data and RLHFlow-8B-DS-Data. This indicates the potential in empowering real-world applications where pairwise data is hard to collect.
+It is noteworthy that our implicit PRM (DPO) achieves the overall best performance, surpassing the previous SOTA of this backbone. Our implicit PRM (CE) also outperforms all baselines except RLHFlow-8B-Mistral-Data and RLHFlow-8B-DS-Data. This indicates the potential in empowering real-world applications where pairwise data is hard to collect.
 
 ## Our Implicit PRMs reduce the overhead of data collection and training by 38.8×
 
@@ -61,7 +61,7 @@ It is noteworthy that our implicit PRM (DPO) achieves overall best performance, 
 
 <img src="figs/majority_vote.png" width="400px">
 
-KTO and CE variants gain the most from the integration, both of which fail to surpass majority voting alone but outperforms it through weighted best-of-N. It is also noteworthy that CE loss become the most effective when augmented with majority voting, once again demonstrating its potential.
+KTO and CE gain the most from the integration, both of which fail to surpass majority voting alone but outperforms it through weighted best-of-N. It is also noteworthy that CE loss becomes the most effective when augmented with majority voting, once again demonstrating its potential.
 
 
 ## Scaling Up Instructions and Responses can Improve Implicit PRMs
