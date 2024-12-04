@@ -36,8 +36,11 @@ Therefore, **we can indeed obtain PRMs, or more fine-grained token-level RMs, si
 
 We evaluate Implicit PRM with best-of-N sampling. We generate testsets on MATH500 with three generation models. 
 We implement Math-Shepherd and AutoPSV and train on [our dataset](). We also compare to six off-the-shelf ORMs and PRM, including the (previous) SOTA PRMs of Llama-3.1 class, RLHFlow/Llama3.1-8B-PRM-Mistral-Data and RLHFlow/Llama3.1-8B-PRM-Deepseek-Data.
-We instantiate our proposition using various reward modeling objectives, including DPO, NCA, KTO, and cross-entropy (CE). Particularly, given esponse-level label $l$, CE is implemented as follows
-$$\mathcal{L}_{CE} = l \cdot \log \sigma \left( \beta \log \frac{\pi_\theta(\mathbf{y})}{\pi_\text{ref}(\mathbf{y})} \right) + (1-l) \cdot \log\left[ 1 - \sigma \left( \beta \log \frac{\pi_\theta(\mathbf{y})}{\pi_\text{ref}(\mathbf{y})} \right) \right]$$
+We instantiate our proposition using various reward modeling objectives, including DPO, NCA, KTO, and cross-entropy (CE). Particularly, given esponse-level label $l$, CE is implemented as follows:
+
+```math
+\mathcal{L}_{CE} = l \cdot \log \sigma \left( \beta \log \frac{\pi_\theta(\mathbf{y})}{\pi_\text{ref}(\mathbf{y})} \right) + (1-l) \cdot \log\left[ 1 - \sigma \left( \beta \log \frac{\pi_\theta(\mathbf{y})}{\pi_\text{ref}(\mathbf{y})} \right) \right]
+```
 
 ## Various implicit reward modeling objectives outperform baselines
 
