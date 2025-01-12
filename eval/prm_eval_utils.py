@@ -456,7 +456,7 @@ def get_reward(model, inputs, type, accelerator, ref_per_token_logps=None, good_
                             rewards = torch.where(inputs['special_tokens'][:, 1:] == -100, 1e3, rewards)
                         else:
                             rewards = beta_reward.clone()
-                        rewards = R(rewards)
+                        rewards = gather_object(rewards)
                         all_rewards[ref_setup][beta_method][reward_approach] = rewards
 
 
