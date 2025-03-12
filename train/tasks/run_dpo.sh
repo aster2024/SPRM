@@ -21,11 +21,11 @@ train_dir=dpo_data
 exp_name=dpo
 save_steps=-1
 max_epochs=1
-LR=5e-7
-
+#LR=5e-7
+LR=1e-5
 
 datapath=./processed_data/$train_dir
-modelpath=meta-llama/Llama-3.1-8B-Instruct
+modelpath=HuggingFaceTB/SmolLM-135M-Instruct
 
 save_steps=$save_steps
 max_epochs=$max_epochs
@@ -59,4 +59,4 @@ openrlhf.cli.train_dpo \
 EOF
 
 
-deepspeed --module $training_commands
+deepspeed --include localhost:2 --master_port 29501 --module $training_commands

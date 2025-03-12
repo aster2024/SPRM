@@ -1,30 +1,6 @@
-MODEL_NAME="mistral-7b-bon"
-CONFIG_NAME="config/7b"
+#!/bin/bash
 
-CUR_DATE="notebook"
-
-OPTS=""
-
-# dpo version
-OPTS+=" --load Windy0822/ImplicitPRM_DPO"
-OPTS+=" --ref-load meta-llama/Llama-3.1-8B-Instruct"
-OPTS+=" --type implicit_prm"
-
-# prm as math-shepherd version
-#OPTS+=" --load peiyi9979/math-shepherd-mistral-7b-prm"
-#OPTS+=" --tokenizer-path peiyi9979/math-shepherd-mistral-7b-prm"
-#OPTS+=" --type baseline-ntp"
-#OPTS+=" --prm-token ки"
-
-OPTS+=" --bon-dataset math" #choices: math gsm8k qa
-OPTS+=" --batch-size 4"
-OPTS+=" --baseline 0" # output pass@k and self-consistency@n if baseline=1
-OPTS+=" --combine 0" # integrate self-consistency if combine=1
-
-OPTS+=" $@"
-
-
-CMD="python -m torch.distributed.launch --master_port 20550 --nproc_per_node=4 bon_eval.py ${OPTS}"
-echo "${CMD}"
-$CMD
-
+model_name=meta-llama/Llama-3.1-8B-Instruct
+dataset_file=testset/math-llama3.1-8b-inst-64.json
+CUDA_VISIBLE_DEVICES=7 python eval/bon_eval.py --model_name $model_name --dataset_file $dataset_file --reward_model_load model/reward_model_svm_meta-llama_Llama-3.1-8B-Instruct.pt --model_type svm --max_samples 500
+CUDA_VISIBLE_DEVICES=7 python eval/bon_eval.py --model_name $model_name --dataset_file $dataset_file --reward_model_load model/reward_model_linear_meta-llama_Llama-3.1-8B-Instruct.pt --model_type linear --max_samples 500

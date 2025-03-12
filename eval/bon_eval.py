@@ -1,225 +1,250 @@
-import pandas as pd
-import numpy as np
-import random
-from accelerate import Accelerator
-import torch
+#!/usr/bin/env python
+import argparse
+import json
+import warnings
 import os
+import sys
+from collections import defaultdict
 from tqdm import tqdm
-from copy import deepcopy
-from collections import Counter
+import torch
 import time
 
-from prm_eval_utils import *
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
-def seed_everything(seed=0):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+from utils import *
 
 
+def evaluate_all_models(args, reward_model_files):
+    """
+    Evaluate candidate groups using *multiple* reward models.
+    For each candidate, immediately after extracting detailed info (and token features),
+    the reward is computed with all reward models.
+    """
+    print("\n========== Starting Evaluation ==========")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    set_seed(args.seed)
 
-def compute_metrics(dataset_name, scored_results, key_list):
-    
-    sample_nums = [1, 2,4,8, 16, 32, 64]
+    ds = load_data(args.dataset_file)
+    print(f"Loaded {len(ds)} candidate outputs from {args.dataset_file}.")
 
-    metrics = {"w/o sc":{}, "w/ sc":{}, "sc": {}, "pass@k": {}}
+    # Load tokenizer and LM (model_lm) once for extraction.
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+    model_lm = AutoModelForCausalLM.from_pretrained(
+        args.model_name,
+        torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+        device_map="auto"
+    )
+    model_lm.eval()
 
-    for use_sc in [False, True]:
-        sc_key = "w/ sc" if use_sc else "w/o sc"
-        for n in sample_nums:
-            splitted_completions = split_query(scored_results, n, max(sample_nums))
-            if not args.baseline:
-                for kind in key_list:
-                    if not use_sc:
-                        selected_completions = best_of_n(splitted_completions,kind)
-                    else:
-                        selected_completions = []
-                        for comps in splitted_completions:
-                            selected_completions += comps
-                    acc_list = [comp["correctness"] for comp in selected_completions]
-                    output_list = [comp["extracted_output"] for comp in selected_completions]
+    # Use the first sample to determine the feature dimension.
+    sample0 = ds[0]
+    if len(sample0.get("steps", [])) == 0:
+        print("No reasoning steps in the first sample, exiting evaluation.")
+        return None
 
-                    if not use_sc:
-                        acc = sum(acc_list) / len(acc_list)
-                        metrics[sc_key][n] = round(acc * 100, 1)
-                    else:
-                        correct,sumv = 0,0
-                        for ii in range(len(splitted_completions)):
-                            answer_dict = {k:0 for k in set(output_list[ii*n:(ii+1)*n])} # collect answers for this prompt
-                            reward_list = [ele[kind] for ele in selected_completions[ii*n:(ii+1)*n]] # corresponding rewards
-                            for ele,reward in zip(output_list[ii*n:(ii+1)*n],reward_list):
-                                if "implicit_prm" in args.type:
-                                    answer_dict[ele]+=torch.sigmoid(torch.tensor(reward)).item() # should we do sigmoid or not?
-                                else:
-                                    answer_dict[ele]+=torch.tensor(reward).item()
-                            answer_dict = dict(sorted(answer_dict.items(), key=lambda x: x[1], reverse=True))
-                            select_answer = max(answer_dict, key=answer_dict.get)
-                            is_correct = select_answer == splitted_completions[ii][0]['reference'] # we have preprocessed the outputs: if correct, output==gt
-                            correct += is_correct
-                            sumv+=1
+    detailed_info0 = extract_detailed_info_for_reasoning_path(
+        sample0["prompt"],
+        sample0["steps"],
+        args.separator,
+        args.layers,
+        tokenizer,
+        model_lm,
+        apply_norm=args.apply_norm,
+        to_cpu=False
+    )
+    hidden_states = detailed_info0["hidden_states"]
+    sorted_layers = sorted(hidden_states.keys(), key=lambda x: int(x))
+    feature_dim = 0
+    for layer in sorted_layers:
+        if hidden_states[layer] is not None:
+            feature_dim += hidden_states[layer].shape[-1]
+    print(f"Reward model feature dimension: {feature_dim}")
 
-                        acc = correct/sumv
+    # For each reward method (key in reward_model_files), build and load the reward model.
+    reward_models = {}
+    for method, ckpt_file in reward_model_files.items():
+        base_model = LinearRewardModel(feature_dim, disable_gate=args.disable_gate).to(device)
+        if args.use_dim_reduction:
+            dim_reduction = DimReduction(feature_dim, args.dim_reduction_dim).to(device)
+            reward_model = RewardModelWithDimReduction(base_model, dim_reduction).to(device)
+        else:
+            reward_model = base_model
+        checkpoint = torch.load(ckpt_file, map_location=device)
+        reward_model.load_state_dict(checkpoint)
+        reward_model.eval()
+        reward_models[method] = reward_model
+        print(f"Loaded reward model [{method}] from checkpoint: {ckpt_file}")
 
-                    metrics[sc_key][n] = round(acc * 100, 1)
-    
-    # baselines
-    for n in sample_nums:
-        splitted_completions = split_query(scored_results, n, max(sample_nums))
-        selected_completions = []
-        for comps in splitted_completions:
-            selected_completions += comps
-        
-        acc_list = [comp["correctness"] for comp in selected_completions]
-        output_list = [comp["extracted_output"] for comp in selected_completions]
-        
-        total_index = int(len(acc_list) / n)
+    # Group candidates by prompt index.
+    groups_dict = defaultdict(list)
+    for sample in ds:
+        groups_dict[sample["idx"]].append(sample)
+    if args.max_samples:
+        groups_dict = dict(list(groups_dict.items())[:args.max_samples])
 
-        pass_k = sum([1 for ii in range(total_index) if any(acc_list[ii*n:(ii+1)*n])])/total_index
-        consistent_outputs = [Counter(output_list[ii*n:(ii+1)*n]).most_common(1)[0][0] for ii in range(total_index)]  # (num_instructions, )
-        position_of_consistent_outputs = [output_list[ii*n:(ii+1)*n].index(consistent_outputs[ii]) for ii in range(total_index)]  # (num_instructions, )
-        acc_of_consistency = [acc_list[ii*n:(ii+1)*n][idx_of_split] for ii, idx_of_split in enumerate(position_of_consistent_outputs)]
-        sc = sum(acc_of_consistency)/total_index
+    # Initialize results dictionary per method.
+    results = { method: [] for method in reward_models.keys() }
+    total_time = 0.0
 
-        metrics["sc"][n] = round(sc * 100, 1)
-        metrics["pass@k"][n] = round(pass_k * 100, 1)
+    for idx, candidate_list in tqdm(groups_dict.items(), desc="Processing candidate groups"):
+        # For each group (same prompt), maintain a separate list per reward model.
+        group_results = { method: [] for method in reward_models.keys() }
+        for candidate in candidate_list:
+            prompt = candidate["prompt"]
+            reference = candidate.get("reference", "")
+            detailed_info = extract_detailed_info_for_reasoning_path(
+                prompt,
+                candidate.get("steps", []),
+                args.separator,
+                args.layers,
+                tokenizer,
+                model_lm,
+                apply_norm=args.apply_norm,
+                to_cpu=False
+            )
+            token_features = get_token_features(detailed_info)
+            if token_features is None:
+                continue
+            seq_len = token_features.size(0)
+            # Move token features to device and add a batch dimension.
+            token_features = token_features.unsqueeze(0).to(device)
+            boundaries = detailed_info.get("boundaries", None)
+            if boundaries is not None and len(boundaries) >= 2:
+                step_boundaries = boundaries[1:]
+            else:
+                warnings.warn("No valid boundaries found, using the whole sequence.")
+                step_boundaries = [(0, seq_len)]
+            candidate_text = args.separator.join(candidate.get("steps", []))
+            correct = bool(candidate["correctness"])
 
-    return metrics
-
-
-
-if __name__=='__main__':
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--local-rank", type=int, default=0)
-    parser.add_argument("--batch-size", type=int, default=0)
-    parser.add_argument("--baseline", type=int, default=0)
-    parser.add_argument("--combine", type=int, default=0)
-    parser.add_argument("--type", type=str, default='implicit_prm',choices=['implicit_prm','baseline-value-head','baseline-ntp','implicit_prm-orm'])
-
-    parser.add_argument("--begin-of-action-token", type=str, default='')
-    parser.add_argument("--prm-token", type=str, default=None)
-    parser.add_argument("--reward-integration", type=str, default='min',choices=['min','sum','mean'])
-
-    parser.add_argument("--load", type=str, required=True)
-    parser.add_argument("--tokenizer-path", type=str, default=None)
-    parser.add_argument("--ref-tokenizer-path", type=str, default=None)
-    parser.add_argument("--ref-load", type=str,default=None)
-    parser.add_argument("--config-load", type=str, default=None)
-
-    parser.add_argument("--bon-dataset", type=str,default="math",choices=['math'])
-    parser.add_argument("--save-dir", type=str,default="./output_rewards_final")
-
-    args = parser.parse_args()
-    print(args)
-    accelerator = Accelerator()
-
-    
-    file_list, origin_dataset = get_raw_data(args.bon_dataset)
-    
-    tokenizer, ref_tokenizer = get_tokenizer(args.load, args.ref_load)
-
-    begin_of_action_token = args.begin_of_action_token
-    prm_token = args.prm_token if args.prm_token else ""
-    good_token, bad_token = "+", "-"
-    prm_token_id, good_token_id, bad_token_id = set_special_token_ids(prm_token, good_token, bad_token, tokenizer)
-
-    if accelerator.is_main_process:
-        print('PRM_token:',prm_token,prm_token_id, 'Good token, Bad token:',good_token,good_token_id,bad_token,bad_token_id)
-
-
-    model, ref_model, ref_logits_path_list = init_ds_models(args.type, args.load, args.ref_load, args.bon_dataset)
-
-    special_ids = [tokenizer.encode('\nStep', add_special_tokens=False)[-1],
-                   tokenizer.encode(' Step', add_special_tokens=False)[-1],
-                   tokenizer.encode('Step 2:', add_special_tokens=False)[-1]] # [Step, _Step, :]
-    prm_special_ids = {"prm_token_id":prm_token_id, "good_token_id":good_token_id, "bad_token_id":bad_token_id}
-
-    for file_index, file_name in enumerate(file_list):
-        queries = load_data(file_name, origin_dataset)
-        if accelerator.is_main_process:
-            print('Current evaluated file:',file_name)
-
-        random.seed(0)
-        dataloader, ref_dataloader = get_dataloader(args.type, queries, args.batch_size, tokenizer, ref_tokenizer, special_ids, prm_special_ids, accelerator)
-
-        dataloader = devide_dataloader_to_devices(dataloader, accelerator, args.local_rank)
-        ref_dataloader = devide_dataloader_to_devices(ref_dataloader, accelerator, args.local_rank) if ref_dataloader != None else None
-
-        save_name = args.load.split('/')[-1] if args.load.split('/')[-1]!='' else args.load.split('/')[-2]
-        output_file = os.path.join(args.save_dir,f"scored_{file_name.split('/')[-1][:-5]}-{save_name if 'orm' not in args.type else save_name+'-orm'}.json")
-        os.makedirs(args.save_dir, exist_ok=True)
-        if accelerator.is_local_main_process:
-            print("output_file:", output_file)
-        if not args.baseline and not os.path.exists(output_file):
-            if 'implicit_prm' in args.type:
-                if accelerator.is_local_main_process:
-                    print("ref_file:", ref_logits_path_list[file_index])
-
-                if os.path.exists(ref_logits_path_list[file_index].replace(".json", f"-{accelerator.device}.pickle")): # already have one; directly load
-                    all_ref_logits = torch.load(ref_logits_path_list[file_index].replace(".json", f"-{accelerator.device}.pickle"))
-                    all_ref_logits = [torch.tensor(ref_per_token_logps).to(accelerator.device) for ref_per_token_logps in all_ref_logits]
-                elif ref_dataloader: # need to compute ref logits
-                    all_ref_logits = []
-                    with torch.no_grad():
-                        for inputs in tqdm(ref_dataloader, desc="ref forward"):
-                            ref_per_token_logps = get_logps(ref_model,inputs,args.type)
-                            all_ref_logits.append(ref_per_token_logps)
-                    try:
-                        all_ref_logits_for_save = [ref_per_token_logps.tolist() for ref_per_token_logps in deepcopy(all_ref_logits)]
-                        torch.save(all_ref_logits_for_save, ref_logits_path_list[file_index].replace(".json", f"-{accelerator.device}.pickle"))#, pickle=True)
-                    except Exception as e:
-                        print(e)
-                        pass
-                print(f"{len(all_ref_logits)=}")
-
-            print(f"{len(dataloader)=}")
-
-            torch.cuda.synchronize()
-            start_time = time.perf_counter()
-
-            for batch_id, inputs in tqdm(enumerate(dataloader), desc="policy forward"):
-                
-                if "implicit_prm" in args.type:
-                    batch_rewards, reward_idxes = get_reward(model, inputs, args.type, accelerator, ref_per_token_logps=all_ref_logits[batch_id])
+            # For each reward model, immediately compute reward.
+            for method, reward_model in reward_models.items():
+                start_time = time.time()
+                if args.eval_mode in ["min", "mean", "max"]:
+                    reward_score = reward_model(
+                        token_features, [seq_len],
+                        is_eval=True,
+                        boundaries=[step_boundaries],
+                        reward_mode=args.eval_mode
+                    )
+                elif args.eval_mode == "orm":
+                    reward_score = reward_model(
+                        token_features, [seq_len],
+                        is_eval=False  # In orm mode, the reward model would act like in training mode
+                    )
                 else:
-                    batch_rewards, reward_idxes = get_reward(model, inputs, args.type, accelerator, good_token_id=good_token_id, bad_token_id=bad_token_id)
+                    raise ValueError(f"Invalid evaluation mode: {args.eval_mode}")
+                end_time = time.time()
+                total_time += end_time - start_time
+                reward_score = reward_score.item()
+                candidate_result = {
+                    "prompt": prompt,
+                    "reference": reference,
+                    "extracted_output": candidate.get("extracted_output", candidate_text),
+                    "correctness": int(correct),
+                    "reward": reward_score
+                }
+                group_results[method].append(candidate_result)
 
-                batch_rewards, queries = manipulate_rewards(batch_rewards, queries, reward_idxes, accelerator)
+        for method in reward_models.keys():
+            if group_results[method]:
+                results[method].append(group_results[method])
+    # End for each group.
+    print(f"Total time taken for reward computation: {total_time:.4f} seconds")
 
-            torch.cuda.synchronize()
-            elapsed = time.perf_counter() - start_time
+    # Compute and print pass@k metrics for each reward model.
+    all_metrics = {}
+    for method, groups in results.items():
+        if len(groups) == 0:
+            print(f"No valid candidate results for method {method}")
+            continue
+        metrics = compute_metrics(groups, args.k_vals)
+        print(f"\n======== Pass@k Evaluation Results for model [{method}] ========")
+        for k, val in metrics.items():
+            print(f"Pass@{k}: {val}%")
+        print("===========================================")
+        all_metrics[method] = metrics
+        # Save metrics per model.
+        if args.metrics_file is None:
+            norm_part = "norm_" if args.apply_norm else ""
+            metrics_file = f"res/eval_metrics_{method}_{args.eval_mode}_{norm_part}{args.model_name.replace('/', '_')}_2.json"
+        else:
+            base, ext = os.path.splitext(args.metrics_file)
+            metrics_file = f"{base}_{method}{ext}"
+        with open(metrics_file, "w") as f:
+            json.dump(metrics, f, indent=2)
+        print(f"Evaluation metrics saved to {metrics_file}")
 
-            if accelerator.is_main_process:
-                print(queries[0])
-                print('Save file at:',output_file)
-                print('Spending Time:', elapsed)
-                pd.DataFrame(queries).to_json(output_file, indent=4, orient="records")
-        elif os.path.exists(output_file):
-            import pandas as pd
-            if accelerator.is_local_main_process:
-                print("load saved rewards")
-            queries = pd.read_json(output_file).to_dict("records")
+    if len(all_metrics) > 1:
+        print("\n===== Overall Evaluation Metrics =====")
+        for method, m in all_metrics.items():
+            print(f"Method [{method}]:")
+            for k, v in m.items():
+                print(f"   Pass@{k}: {v}%")
+        print("=======================================")
+    return all_metrics
 
-        results = {}
-        for ref_setup in queries[0]["reward"].keys():
-            for beta_method in queries[0]["reward"][ref_setup].keys():
-                for reward_approach in queries[0]["reward"][ref_setup][beta_method]:
-                    for method in ["min", "sum"]:
-                        for query in queries:
-                            query[f"{ref_setup}-{beta_method}-{reward_approach}-{method}-reward"] = query["reward"][ref_setup][beta_method][reward_approach][method]
-                        results[f"{ref_setup}-{beta_method}-{reward_approach}-{method}"] = compute_metrics(args.bon_dataset, queries, [f"{ref_setup}-{beta_method}-{reward_approach}-{method}-reward"])
-                        for query in queries:
-                            del query[f"{ref_setup}-{beta_method}-{reward_approach}-{method}-reward"]
-                        if accelerator.is_main_process:
-                            print(f"{ref_setup}-{beta_method}-{reward_approach}-{method}:", results[f"{ref_setup}-{beta_method}-{reward_approach}-{method}"])
 
-        if accelerator.is_main_process:
-            os.makedirs("metrics", exist_ok=True)
-            pd.DataFrame(results).to_json(f"metrics/{file_name.split('/')[-1][:-5]}-{save_name if 'orm' not in args.type else save_name+'-orm'}.json", orient="records", lines=True)
-            f = open(f"metrics/{file_name.split('/')[-1][:-5]}-{save_name if 'orm' not in args.type else save_name+'-orm'}.txt", "w")
-            for k, v in results.items():
-                print(f"{k}: {v}")
+def main():
+    parser = argparse.ArgumentParser(
+        description="Evaluate candidate reasoning paths using multiple trained PRM reward models"
+    )
+    # Model and dataset related arguments
+    parser.add_argument("--model_name", type=str, required=True,
+                        help="Pre-trained LM model name or path (e.g., 'gpt2').")
+    parser.add_argument("--dataset_file", type=str, required=True,
+                        help="Path to the dataset JSON file containing candidate outputs.")
+    parser.add_argument("--separator", type=str, default="\n\n",
+                        help="Separator used to join reasoning steps (default: two newlines).")
+    parser.add_argument("--layers", type=int, nargs="+", default=None,
+                        help="Hidden layer indices to extract; if empty, extract all layers.")
+    # Reward model arguments
+    parser.add_argument("--reward_model_load", type=str, default=None,
+                        help="Path to a saved reward model checkpoint. Optional if --methods is provided.")
+    parser.add_argument("--methods", type=str, nargs="+", choices=["ce", "hinge", "dpo", "infonca", "nca"],
+                        default=None,
+                        help="List of reward methods to evaluate. If set, reward model checkpoints are automatically loaded from the default directory.")
+    parser.add_argument("--disable_gate", action="store_true",
+                        help="Disable gating mechanism in the reward model.")
+    parser.add_argument("--apply_norm", action="store_true",
+                        help="Apply normalization to hidden states before reward computation.")  # This does not lead to better performance by my observation
+    parser.add_argument("--use_dim_reduction", action="store_true",
+                        help="Add a dimension reduction layer before the reward model if set.")
+    parser.add_argument("--dim_reduction_dim", type=int, default=128,
+                        help="Target dimension for dimension reduction (default: 128).")
+    # Pass@k evaluation arguments
+    parser.add_argument("--k_vals", type=int, nargs="+", default=[1, 2, 4, 8, 16, 32, 64],
+                        help="List of candidate numbers for pass@k evaluation (default: 1 2 4 8 16 32 64).")
+    parser.add_argument("--eval_mode", type=str, default="min", choices=["min", "mean", "max", "orm"],
+                        help="Aggregation mode for step rewards in evaluation ('min', 'mean', 'max' or 'orm', default: min).")
+    # Other parameters
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed (default: 42).")
+    parser.add_argument("--metrics_file", type=str, default=None,
+                        help="If set, save evaluation metrics to this JSON file. For multiple evaluations, the method name will be appended.")
+    parser.add_argument("--max_samples", type=int, default=None,
+                        help="Maximum number of samples to evaluate (default: None).")
+    args = parser.parse_args()
+
+    # Determine evaluation mode: either use --methods or a single reward_model_load.
+    reward_model_files = {}
+    if args.methods is not None and len(args.methods) > 0:
+        if args.reward_model_load:
+            raise ValueError("Either --methods or --reward_model_load must be provided, not both.")
+
+        norm_part = "norm_" if args.apply_norm else ""
+        for method in args.methods:
+            # Expect reward checkpoints to be stored with this naming convention:
+            file_name = f"model/reward_model_{method}_{norm_part}{args.model_name.replace('/', '_')}.pt"
+            reward_model_files[method] = file_name
+    else:
+        if args.reward_model_load is None:
+            raise ValueError("Either --methods or --reward_model_load must be provided.")
+        reward_model_files["single"] = args.reward_model_load
+
+    evaluate_all_models(args, reward_model_files)
+
+
+if __name__ == "__main__":
+    main()

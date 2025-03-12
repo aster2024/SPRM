@@ -17,8 +17,8 @@ def get_raw_data(dataset_name, process_inst=False):
     if dataset_name == 'math':
         file_list = [
             './testset/math-llama3.1-8b-inst-64.json',
-            './testset/math-Meta-Llama-3.1-70B-Instruct-64.json',
-            './testset/math-Mistral-7B-Instruct-v0.2-64.json'
+            # './testset/math-Meta-Llama-3.1-70B-Instruct-64.json',
+            # './testset/math-Mistral-7B-Instruct-v0.2-64.json'
         ]
         path = './testset/MATH500.jsonl'
         with open(path) as f:
@@ -136,14 +136,13 @@ def init_ds_models(type, load, ref_load, bon_dataset):
     return model, ref_model, ref_logits_path_list
 
 
-
 def load_data(file_name, origin_dataset):
-        
     queries = []
     if file_name.endswith('json'):
-        cur_data = json.load(open(file_name))
+        with open(file_name, encoding="utf-8") as f:
+            cur_data = json.load(f)
     else:
-        with open(file_name) as f:
+        with open(file_name, encoding="utf-8") as f:
             cur_data = [json.loads(line) for line in f]
 
     if 'gsm' in file_name:
@@ -154,31 +153,35 @@ def load_data(file_name, origin_dataset):
         return cur_queries
 
     assert len(origin_dataset) == len(cur_queries), (len(origin_dataset), len(cur_queries))
+
     for idx, (data, ori) in enumerate(zip(cur_queries, origin_dataset)):
         if 'problem' in ori:
-            assert 'question' in data and data['question'] == ori['problem'] or 'problem' in data and data[
-                'problem'] == ori['problem']
+            assert ('question' in data and data['question'] == ori['problem']) or \
+                   ('problem' in data and data['problem'] == ori['problem'])
         elif 'question' in ori:
-            assert 'question' in data and data['question'] == ori['question'] or 'problem' in data and data[
-                'problem'] == ori['question']
+            assert ('question' in data and data['question'] == ori['question']) or \
+                   ('problem' in data and data['problem'] == ori['question'])
         else:
-            assert 'question' in data and data['question'] == ori['Question'] or 'problem' in data and data[
-                'problem'] == ori['Question'] or 'Question' in data and data['Question'] == ori['Question'], (
-            data.keys(), ori.keys())
-        assert len(data['responses']) == 128 or len(data['responses']) == 64, (
-            file_name, len(data['responses']))
+            assert ('question' in data and data['question'] == ori['Question']) or \
+                   ('problem' in data and data['problem'] == ori['Question']) or \
+                   ('Question' in data and data['Question'] == ori['Question']), (data.keys(), ori.keys())
+
+        assert len(data['responses']) == 128 or len(data['responses']) == 64, (file_name, len(data['responses']))
         if len(data['responses']) > 64:
             data['responses'] = data['responses'][:64]
+
         for response_dict in data['responses']:
-            queries.append({
+            record = {
                 'idx': idx,
                 'prompt': data['question'] if 'question' in data else (
-                    data['problem'] if 'problem' in data else data['Question']),
+                          data['problem'] if 'problem' in data else data['Question']),
                 'response': response_dict['text'],
                 'solution': ori['solution'] if 'solution' in ori else str(ori['Answer']),
-            })
+            }
+            if 'lens' in data:
+                record['lens'] = data['lens']
+            queries.append(record)
     return queries
-
 
 
 def implicit_prm_data_collator(example, tokenizer, special_ids, accelerator, type):
@@ -242,6 +245,99 @@ def implicit_prm_data_collator(example, tokenizer, special_ids, accelerator, typ
         'idx':torch.tensor(idx).to(accelerator.device),
         'reward_idx':torch.tensor(reward_idx).to(accelerator.device)
     }
+
+
+# import json
+# import torch
+# from torch.nn.utils.rnn import pad_sequence
+#
+# def implicit_prm_data_collator(example, tokenizer, special_ids, accelerator, type, policy_tokenizer=None):
+#     """
+#     Data collator that integrates lens information directly into the conversation text.
+#     If 'lens' is part of the type, the policy_tokenizer is used to decode the lens tokens
+#     and the decoded lens info is injected into both the query and assistant's answer.
+#     """
+#     inputs = []
+#     idx, reward_idx = [], []
+#     special_tokens = []
+#     label_mask = []
+#
+#     for d in example:
+#         if type is not None and "lens" in type:
+#             if policy_tokenizer is None:
+#                 raise ValueError("policy_tokenizer is required for 'lens' type")
+#             processed_answer = []
+#             for i, step in enumerate(d["answer"]):
+#                 lens_info = []
+#                 if d.get("lens") and "steps" in d["lens"] and len(d["lens"]["steps"]) > i:
+#                     # Here we assume d["lens"]["steps"][i] is a list (or token ids) that can be decoded directly.
+#                     # If you have per-layer info, you might want to loop over layers.
+#                     lens_decoded = policy_tokenizer.decode(d["lens"]["steps"][i], skip_special_tokens=False)
+#                     lens_info.append(lens_decoded)
+#                 if lens_info:
+#                     # Format the lens info; you can modify the formatting as needed.
+#                     processed_step = f"{step}\nLens: " + "\n".join(lens_info)
+#                 else:
+#                     processed_step = step
+#                 processed_answer.append(processed_step)
+#             answer_content = processed_answer
+#         else:
+#             answer_content = d["answer"]
+#
+#         # Optionally, inject lens information into the user query if available.
+#         query_content = d["query"]
+#         if type is not None and "lens" in type and d.get("lens") and "prompt" in d["lens"]:
+#             prompt_lens = policy_tokenizer.decode(d["lens"]["prompt"], skip_special_tokens=False)
+#             query_content = f"{query_content}\nLens prompt: {prompt_lens}"
+#
+#         # Construct the chat conversation using the (possibly augmented) query and answer content.
+#         input_ids = tokenizer.apply_chat_template([
+#             {"role": "user", "content": query_content},
+#             {"role": "assistant", "content": "\n\n".join(answer_content)},
+#         ], tokenize=True, add_generation_prompt=False)
+#         inputs.append(torch.tensor(input_ids))
+#
+#         cur_special_ids = []
+#         intermediate_token_ids = []
+#         # Create special token positions for each step in the answer.
+#         for step_num in range(0, len(answer_content) + 1):
+#             conv = tokenizer.apply_chat_template([
+#                 {"role": "user", "content": query_content},
+#                 {"role": "assistant", "content": "\n\n".join(answer_content[:step_num])},
+#             ], tokenize=False, add_generation_prompt=False)
+#             conv = conv.strip()
+#             if step_num != len(answer_content) and conv.endswith("<|start_header_id|>assistant<|end_header_id|>"):
+#                 conv = conv[:-len("<|start_header_id|>assistant<|end_header_id|>")]
+#             if step_num != len(answer_content) and conv.endswith("<|eot_id|>"):
+#                 conv = conv[:-len("<|eot_id|>")]
+#             if step_num != 0 and step_num != len(answer_content):
+#                 conv += '\n\n'
+#             currect_ids = tokenizer.encode(conv, add_special_tokens=False)
+#             intermediate_token_ids.append(currect_ids)
+#             cur_special_ids.append(len(currect_ids) - 2)
+#         if "orm" in type:
+#             cur_special_ids = [cur_special_ids[0], cur_special_ids[-1]]
+#         special_tokens.append(torch.tensor(cur_special_ids))
+#         label_mask.append(torch.tensor([0] * cur_special_ids[0] + [1] * (len(input_ids) - cur_special_ids[0])))
+#         idx.append(d['idx'])
+#         reward_idx.append(d['reward_idx'])
+#
+#     labels = pad_sequence(inputs, padding_value=-100, batch_first=True)
+#     inputs_padded = pad_sequence(inputs, padding_value=tokenizer.pad_token_id, batch_first=True)
+#     attention_mask = (inputs_padded != tokenizer.pad_token_id)
+#     label_mask = pad_sequence(label_mask, padding_value=0, batch_first=True)
+#     special_tokens = pad_sequence(special_tokens, padding_value=-100, batch_first=True)
+#
+#     batch_dict = {
+#         'input_ids': inputs_padded.int().to(accelerator.device),
+#         'attention_mask': attention_mask.int().to(accelerator.device),
+#         'labels': labels.int().to(accelerator.device),
+#         'label_mask': label_mask.to(accelerator.device),
+#         'special_tokens': special_tokens.to(accelerator.device),
+#         'idx': torch.tensor(idx).to(accelerator.device),
+#         'reward_idx': torch.tensor(reward_idx).to(accelerator.device)
+#     }
+#     return batch_dict
 
 
 def prm_data_collator(example, tokenizer, special_ids, accelerator, type):
@@ -324,8 +420,8 @@ def get_dataloader(type_, queries, batch_size, tokenizer, ref_tokenizer, step_ma
 
     dataset = Dataset.from_pandas(pd.DataFrame.from_records(queries))
 
-    data_collator = {'implicit_prm': implicit_prm_data_collator, 'implicit_prm-orm': implicit_prm_data_collator, 'baseline-value-head': prm_data_collator, 'baseline-ntp': prm_data_collator}
-    special_ids = {'implicit_prm': step_mark_ids, 'implicit_prm-orm': step_mark_ids, 'baseline-value-head': prm_special_ids, 'baseline-ntp': prm_special_ids}
+    data_collator = {'implicit_prm': implicit_prm_data_collator, 'implicit_prm_lens': implicit_prm_data_collator, 'implicit_prm-orm': implicit_prm_data_collator, 'baseline-value-head': prm_data_collator, 'baseline-ntp': prm_data_collator}
+    special_ids = {'implicit_prm': step_mark_ids, 'implicit_prm_lens': step_mark_ids, 'implicit_prm-orm': step_mark_ids, 'baseline-value-head': prm_special_ids, 'baseline-ntp': prm_special_ids}
 
     dataloader = DataLoader(dataset,batch_size=batch_size,shuffle=False,
                             collate_fn=partial(data_collator[type_], tokenizer=tokenizer, special_ids=special_ids[type_], accelerator=accelerator, type=type_))
@@ -360,18 +456,17 @@ def get_logps(model,inputs,type):
             logits = model(input_ids=inputs['input_ids'][i], attention_mask=inputs['attention_mask'][i]).logits
             labels = inputs['labels'][i][:, 1:].clone().long()
             logits = logits[:, :-1, :]
+            loss_mask = labels != -100
             labels[labels == -100] = 0
             per_token_logps_ = torch.gather(logits.log_softmax(-1), dim=2, index=labels.unsqueeze(2)).squeeze(2)
-            loss_mask = labels != -100
             per_token_logps_ = per_token_logps_ * loss_mask
             per_token_logps.append(per_token_logps_)
     else:
         logits = model(input_ids=inputs['input_ids'], attention_mask=inputs['attention_mask']).logits
         labels = inputs['labels'][:, 1:].clone().long()
-        logits = logits[:, :-1, :]
+        loss_mask = labels != -100
         labels[labels == -100] = 0
         per_token_logps = torch.gather(logits.log_softmax(-1), dim=2, index=labels.unsqueeze(2)).squeeze(2)
-        loss_mask = labels != -100
         per_token_logps = per_token_logps * loss_mask
 
     return per_token_logps
@@ -408,7 +503,7 @@ def get_reward(model, inputs, type, accelerator, ref_per_token_logps=None, good_
             per_token_logps = get_logps(model,inputs,type)
 
         if 'partial' in type:
-            cur_index = [torch.where(inputs['special_tokens'][i] == -100, 0, inputs['special_tokens'][i]) for i in len(inputs['special_tokens'])]
+            cur_index = [torch.where(inputs['special_tokens'][i] == -100, 0, inputs['special_tokens'][i]) for i in range(len(inputs['special_tokens']))]
         else:
             cur_index = torch.where(inputs['special_tokens']==-100, 0, inputs['special_tokens']) 
 
@@ -436,7 +531,7 @@ def get_reward(model, inputs, type, accelerator, ref_per_token_logps=None, good_
 
                     if 'partial' in type:
                         beta_rewards = []
-                        for i in len(beta_reward_before_scaling):
+                        for i in range(len(beta_reward_before_scaling)):
                             beta_reward = coef * beta_reward_before_scaling[i]
                             beta_reward = beta_reward.cumsum(-1)
                             beta_reward = beta_reward.gather(dim=-1, index=cur_index[i][:, 1:])

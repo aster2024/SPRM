@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="3bd2ce46-58c6-4045-b393-0999df234654" name="xtraa100">
+        <fileTransfer rootFolder="/home/Aster/git/SPRM" accessType="SFTP" host="xtraa100" port="22" sshConfigId="2b97745b-3c3c-44cb-abf9-75f6fd42026d" sshConfig="xtraa100" authAgent="true">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+      <webServer id="34c2a3d8-5aa7-46cf-b183-3584c6b65e7e" name="xtraa100:/">
+        <fileTransfer accessType="SFTP" host="xtraa100" port="22" sshConfigId="2b97745b-3c3c-44cb-abf9-75f6fd42026d" sshConfig="xtraa100" authAgent="true">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+      <webServer id="9673a137-fce2-4d83-ace7-d35bb8a54474" name="xtrah100">
+        <fileTransfer rootFolder="/home/zhaomin/jzguo/SPRM" accessType="SFTP" host="xtrah100" port="22" sshConfigId="9a385668-cc2d-47a7-91a0-5a3682a00102" sshConfig="zhaomin@xtrah100:22 agent" authAgent="true">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+      <webServer id="474c4210-2e72-4bbc-bb2f-f53bded945cc" name="xtra3090">
+        <fileTransfer rootFolder="/home/Aster/projects/SPRM" accessType="SFTP" host="xtra3090" port="22" sshConfigId="ef14b2bc-e4a7-4be4-9791-325c38b63737" sshConfig="Aster@xtra3090:22 agent" authAgent="true">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

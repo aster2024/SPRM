@@ -13,65 +13,119 @@ from openrlhf.trainer import DPOTrainer
 from openrlhf.utils import blending_datasets, get_strategy, get_tokenizer
 from tqdm import tqdm
 import jsonlines
+import json
+from transformers import AutoTokenizer
+import logging
 
-def formalize_dpo_data(save_path):
-    data = load_dataset('Windy0822/ultrainteract_math_rollout')['train']
-    data = [d for d in data]
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+def formalize_dpo_data(save_path, use_lens_json=False, lens_json_path=None, policy_model_name=None):
+    if use_lens_json:
+        assert lens_json_path, "Please provide the path to the lens JSON file when use_lens_json is True"
+        assert policy_model_name, "Please provide the policy model name when use_lens_json is True"
+        with open(lens_json_path, 'r') as f:
+            data = json.load(f)
+        policy_tokenizer = AutoTokenizer.from_pretrained(policy_model_name)
+        print("Using lens JSON file to formalize data.")
+    else:
+        data = load_dataset('Windy0822/ultrainteract_math_rollout')['train']
+        data = [d for d in data]
+        print("Using dataset 'Windy0822/ultrainteract_math_rollout' to formalize data.")
+
     os.makedirs(save_path, exist_ok=True)
-    writer = jsonlines.Writer(open(os.path.join(save_path,'train.jsonl'), 'w'))
+    output_file = 'train_lens.jsonl' if use_lens_json else 'train.jsonl'
+    writer = jsonlines.Writer(open(os.path.join(save_path, output_file), 'w'))
 
     wrong_num = 0
-    for index,sample in tqdm(enumerate(data),desc='Process hf data to OpenRLHF data:'):
-        qid = index
-        dataset = sample['dataset']
-        prompt = sample['prompt']
-        # if prompt not in prompt_set:
-        #     continue
+    skipped_samples = 0
+    total_samples = sum(1 for _ in data)
+    data_iterator = iter(data)
+    for index in tqdm(range(total_samples), desc='Process data to OpenRLHF data:'):
+        sample = next(data_iterator)
+        try:
+            qid = index
+            dataset = sample['dataset']
+            prompt = sample['prompt']
 
-        responses = sample['completions']
-        num_response = len(responses)
-        correctness_info = sample['correctness'][:num_response]
-        correctness_list = [info for info in correctness_info]
-        wrong_num+=1
+            responses = sample['completions']
+            num_response = len(responses)
+            correctness_info = sample['correctness'][:num_response]
+            correctness_list = [info for info in correctness_info]
+            wrong_num += 1
 
-        correct_responses = []
-        incorrect_responses = []
-        for response, correct in zip(responses, correctness_list):
-            if correct:
-                correct_responses.append(response)
-            else:
-                incorrect_responses.append(response)
+            correct_responses = []
+            incorrect_responses = []
 
-        if not (len(correct_responses) and len(incorrect_responses)):
+            for i, (response, correct) in enumerate(zip(responses, correctness_list)):
+                try:
+                    if use_lens_json:
+                        steps = sample['steps'][i]
+                        lens_data = sample['lens']['paths'][i]
+
+                        processed_response = []
+                        for j, step in enumerate(steps):
+                            step_lens = []
+                            for layer in lens_data.keys():
+                                if lens_data[layer]['steps']:
+                                    tokens = lens_data[layer]['steps'][j]
+                                    decoded = policy_tokenizer.decode(tokens, skip_special_tokens=False)
+                                    step_lens.append(f"Layer {layer}: {decoded}")
+                            processed_step = f"{step}\n{chr(10).join(step_lens)}"
+                            processed_response.append(processed_step)
+
+                        final_response = "\n\n".join(processed_response)
+                    else:
+                        final_response = response
+
+                    if correct:
+                        correct_responses.append(final_response)
+                    else:
+                        incorrect_responses.append(final_response)
+                except Exception as e:
+                    logger.error(f"Error processing response {i} in sample {index}: {str(e)}")
+                    continue
+
+            if not (len(correct_responses) and len(incorrect_responses)):
+                continue
+
+            if use_lens_json:
+                lens_explanation = "Note: 'Layer' info shows policy model's internal representations."
+                prompt += f"\n\n{lens_explanation}"
+
+            prompt_turn = {
+                'role': 'user',
+                'content': prompt
+            }
+
+            idx = 0
+            for win in correct_responses:
+                chosen_turn = {
+                    'role': 'assistant',
+                    'content': win
+                }
+                for rej in incorrect_responses:
+                    rejected_turn = {
+                        'role': 'assistant',
+                        'content': rej
+                    }
+                    writer.write({
+                        'chosen': [prompt_turn, chosen_turn],
+                        'rejected': [prompt_turn, rejected_turn],
+                        'id': f'{qid}-{idx}',
+                        'dataset': dataset
+                    })
+                    idx += 1
+
+        except Exception as e:
+            logger.error(f"Error processing sample {index}: {str(e)}")
+            skipped_samples += 1
             continue
 
-        prompt_turn = {
-            'role': 'user',
-            'content': prompt
-        }
-
-        idx = 0
-        for win in correct_responses:
-            chosen_turn = {
-                'role': 'assistant',
-                'content': win
-            }
-            for rej in incorrect_responses:
-                rejected_turn = {
-                    'role': 'assistant',
-                    'content': rej
-                }
-                writer.write({
-                    'chosen': [prompt_turn, chosen_turn],
-                    'rejected': [prompt_turn, rejected_turn],
-                    'id': f'{qid}-{idx}',
-                    'dataset': dataset
-
-                })
-                idx += 1
-
-    print(wrong_num)
-
+    writer.close()
+    print(f"Number of samples with incorrect responses: {wrong_num}")
+    print(f"Number of skipped samples due to errors: {skipped_samples}")
 
 
 
@@ -122,7 +176,7 @@ def train(args):
     optim = strategy.create_optimizer(model, lr=args.learning_rate, betas=args.adam_betas, weight_decay=args.l2)
 
     # prepare for data and dataset
-    formalize_dpo_data(args.dataset)
+    formalize_dpo_data(args.dataset, args.use_lens_json, args.lens_json_path, args.policy_model_name)
     train_data, eval_data = blending_datasets(
         'json@' + args.dataset,
         args.dataset_probs,
@@ -324,6 +378,11 @@ if __name__ == "__main__":
     # TensorBoard parameters
     parser.add_argument("--use_tensorboard", type=str, default=None, help="TensorBoard logging path")
 
+    # Use lens JSON file
+    parser.add_argument("--use_lens_json", action="store_true", default=False)
+    parser.add_argument("--lens_json_path", type=str, default=None)
+    parser.add_argument("--policy_model_name", type=str, default=None)
+
     args = parser.parse_args()
 
     if args.ref_pretrain is None or args.ref_pretrain == "":
@@ -339,5 +398,9 @@ if __name__ == "__main__":
 
     if args.ring_attn_size > 1:
         assert args.packing_samples, "packing_samples must be enabled when using ring attention"
+
+    if args.use_lens_json:
+        assert args.lens_json_path, "Please provide the path to the lens JSON file when use_lens_json is True"
+        assert args.policy_model_name, "Please provide the policy model name when use_lens_json is True"
 
     train(args)

@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="4e2b807a-62ae-41f5-b55e-48cc2868cc0f" name="Changes" comment="Add code for LENS.">
+      <change afterPath="$PROJECT_DIR$/eval/bon_eval.sh.bak" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/eval/bon_eval_baselines.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/eval/bon_eval_combined.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/eval/bon_eval_pca_lda.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/eval/eval_baseline.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/eval/extract.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/eval/get_baseline_rewards_implicit_prm.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/eval/get_baseline_rewards_orm.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/eval/get_baseline_rewards_prm.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/eval/get_rewards.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/get_baseline_rewards_orm.sh" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/get_baseline_rewards_prm.sh" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/hist_lda_plot.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/kde_plot.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/kde_plot_2.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/pca_lda_pipeline.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/train/extract/extract_hidden.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/train/extract/extract_lens.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/train/get_baseline_rewards_orm.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/train/get_baseline_rewards_prm.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/train/tasks/run_dpo_lens.sh" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/train/train_combined_prm.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/train/train_pca_lda.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/train/train_prm.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/train/train_prm_ic.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/train_and_eval.sh" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/train_and_eval_2.sh" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/train_and_eval_pca_lda.sh" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/utils.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/violin_lda_plot.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/eval/bon_eval.py" beforeDir="false" afterPath="$PROJECT_DIR$/eval/bon_eval.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/eval/bon_eval.sh" beforeDir="false" afterPath="$PROJECT_DIR$/eval/bon_eval.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/eval/prm_eval_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/eval/prm_eval_utils.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/train/openrlhf/cli/train_dpo.py" beforeDir="false" afterPath="$PROJECT_DIR$/train/openrlhf/cli/train_dpo.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/train/tasks/run_dpo.sh" beforeDir="false" afterPath="$PROJECT_DIR$/train/tasks/run_dpo.sh" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;Aster2024&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/Aster2024/SPRM.git&quot;,
+    &quot;accountId&quot;: &quot;a8b20266-0fb2-4ff7-9e7e-f217bb092c91&quot;
+  }
+}</component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 3
+}</component>
+  <component name="ProjectId" id="2qCuDMWKxGyrPNXmnTHNrA5TFAx" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="2" id="Add" />
+  </component>
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "WebServerToolWindowPanel.toolwindow.highlight.mappings": "true",
+    "WebServerToolWindowPanel.toolwindow.highlight.symlinks": "true",
+    "WebServerToolWindowPanel.toolwindow.show.date": "false",
+    "WebServerToolWindowPanel.toolwindow.show.permissions": "false",
+    "WebServerToolWindowPanel.toolwindow.show.size": "false",
+    "git-widget-placeholder": "main",
+    "last_opened_file_path": "C:/Users/35291/Desktop/git/SPRM",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "preferences.fileTypes",
+    "vue.rearranger.settings.migration": "true"
+  }
+}]]></component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\Users\35291\Desktop\git\SPRM" />
+      <recent name="C:\Users\35291\Desktop\git\SPRM\eval" />
+      <recent name="C:\Users\35291\Desktop\git\SPRM\train" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\35291\Desktop\git\SPRM" />
+      <recent name="C:\Users\35291\Desktop\git\SPRM\train" />
+    </key>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-js-predefined-1d06a55b98c1-0b3e54e931b4-JavaScript-PY-241.19072.16" />
+        <option value="bundled-python-sdk-8336bb23522e-2767605e8bc2-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-241.19072.16" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="4e2b807a-62ae-41f5-b55e-48cc2868cc0f" name="Changes" comment="" />
+      <created>1734178758189</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1734178758189</updated>
+      <workItem from="1734178759448" duration="694000" />
+      <workItem from="1734179659478" duration="32554000" />
+      <workItem from="1734275765212" duration="290000" />
+      <workItem from="1734276549380" duration="76000" />
+      <workItem from="1734335642030" duration="3000" />
+      <workItem from="1734404304274" duration="280000" />
+      <workItem from="1734406422639" duration="97000" />
+      <workItem from="1734512255066" duration="19000" />
+      <workItem from="1734512973589" duration="43000" />
+      <workItem from="1734686933549" duration="590000" />
+      <workItem from="1734699795728" duration="723000" />
+      <workItem from="1735297937614" duration="139000" />
+      <workItem from="1739332607438" duration="10634000" />
+      <workItem from="1739408041633" duration="937000" />
+      <workItem from="1739416801556" duration="8103000" />
+      <workItem from="1739499366627" duration="8328000" />
+      <workItem from="1739544573245" duration="1110000" />
+      <workItem from="1739588131625" duration="2063000" />
+      <workItem from="1739590226227" duration="8641000" />
+      <workItem from="1739691330362" duration="1762000" />
+      <workItem from="1739755060492" duration="2844000" />
+      <workItem from="1739782217044" duration="37000" />
+      <workItem from="1739790076224" duration="14509000" />
+      <workItem from="1739847048477" duration="7270000" />
+      <workItem from="1739866719820" duration="670000" />
+      <workItem from="1739867414727" duration="3887000" />
+      <workItem from="1739944704227" duration="10001000" />
+      <workItem from="1740143429991" duration="602000" />
+      <workItem from="1740150045115" duration="47848000" />
+      <workItem from="1740448755266" duration="74000" />
+      <workItem from="1740451787635" duration="2251000" />
+      <workItem from="1740556702256" duration="7981000" />
+      <workItem from="1740642505415" duration="21278000" />
+      <workItem from="1740914609392" duration="5380000" />
+      <workItem from="1740925751367" duration="2850000" />
+      <workItem from="1740971365843" duration="5000" />
+      <workItem from="1741010298851" duration="42904000" />
+      <workItem from="1741261043936" duration="24926000" />
+      <workItem from="1741355222984" duration="33721000" />
+      <workItem from="1741452632663" duration="634000" />
+      <workItem from="1741496609983" duration="7749000" />
+      <workItem from="1741510749222" duration="15505000" />
+      <workItem from="1741583734759" duration="9346000" />
+      <workItem from="1741597350809" duration="33569000" />
+    </task>
+    <task id="LOCAL-00001" summary="Add code for LENS.">
+      <option name="closed" value="true" />
+      <created>1734276007407</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1734276007407</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="Add code for LENS." />
+    <option name="LAST_COMMIT_MESSAGE" value="Add code for LENS." />
+  </component>
+</project>
