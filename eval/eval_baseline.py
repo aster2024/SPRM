@@ -23,6 +23,11 @@ def aggregate_step_scores(step_scores, agg_method):
         return max(step_scores)
     elif agg_method == "mean":
         return sum(step_scores) / len(step_scores)
+    elif agg_method == "product":
+        prod = 1.0
+        for s in step_scores:
+            prod *= s
+        return prod
     else:
         raise ValueError(f"Invalid aggregation method: {agg_method}")
 
@@ -91,9 +96,9 @@ def main():
     )
     parser.add_argument("--dataset_file", type=str, required=True,
                         help="Path to the dataset JSON file containing candidate outputs.")
-    parser.add_argument("--k_vals", type=int, nargs="+", default=[1, 2, 4, 8, 16, 32, 64],
+    parser.add_argument("--k_vals", type=int, nargs="+", default=[1, 4, 16, 64],
                         help="List of candidate numbers for pass@k evaluation (default: 1 2 4 8 16 32 64).")
-    parser.add_argument("--eval_mode", type=str, required=True, choices=["min", "mean", "max", "orm"],
+    parser.add_argument("--eval_mode", type=str, required=True, choices=["min", "mean", "max", "product", "orm"],
                         help="Evaluation mode: 'orm' uses candidate['score'] while 'min', 'mean', or 'max' aggregate step_scores.")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed (default: 42).")

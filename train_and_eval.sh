@@ -21,17 +21,13 @@ declare -A max_samples_map=(
 #CUDA_VISIBLE_DEVICES=7 python train/train_combined_prm.py --model_name meta-llama/Llama-3.1-8B-Instruct --max_samples 500 --method hinge --train_mode prm --input_file data/ultrainteract_math_rollout_with_rewards_typeMistral.jsonl
 #CUDA_VISIBLE_DEVICES=7 python eval/bon_eval_combined.py --model_name meta-llama/Llama-3.1-8B-Instruct --methods hinge --eval_mode min --dataset_file testset/math-llama3.1-8b-inst-64_with_rewards_typeMistral.jsonl
 
-for model in "llama3-8b" "mistral-7b" ; do
+for model in "llama3-8b" ; do
     model_name=${model_name_map[${model}]}
     dataset_file=${dataset_file_map[${model}]}
     max_samples=${max_samples_map[${model}]}
 
-    for method in "ce" "infonca" "nca" ; do
-#      echo "Training PRM model $model_name with $method loss..."
-#      CUDA_VISIBLE_DEVICES=1 python train/train_prm.py --model_name $model_name --max_samples $max_samples --methods $method --reward_batch_size 16
-#      CUDA_VISIBLE_DEVICES=1 python eval/bon_eval.py --model_name $model_name --dataset_file $dataset_file --eval_mode min --methods $method
-#      CUDA_VISIBLE_DEVICES=1 python eval/bon_eval.py --model_name $model_name --dataset_file $dataset_file --eval_mode orm --methods $method
-      CUDA_VISIBLE_DEVICES=1 python eval/bon_eval.py --model_name $model_name --dataset_file $dataset_file --eval_mode min --methods $method
+    for method in "hinge"; do
+      CUDA_VISIBLE_DEVICES=1 python eval/get_rewards.py --model_name $model_name --dataset_file $dataset_file --method $method --calc_mode orm
     done
 done
 

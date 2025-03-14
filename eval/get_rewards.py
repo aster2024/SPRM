@@ -1,18 +1,12 @@
 #!/usr/bin/env python
 import argparse
-import json
-import warnings
 import os
 import sys
 import time
 
-from collections import defaultdict
-import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from tqdm import tqdm
-import math  # if needed
 
-# 添加相对路径，确保可以导入 utils 中的函数（例如：set_seed, load_data, extract_detailed_info_for_reasoning_path, get_token_features, LinearRewardModel, DimReduction, RewardModelWithDimReduction）
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from utils import *
 
@@ -29,11 +23,9 @@ def save_rewards(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     set_seed(args.seed)
 
-    # Load dataset from file.
     ds = load_data(args.dataset_file)
     print(f"Loaded {len(ds)} candidate outputs from {args.dataset_file}.")
 
-    # Load tokenizer and language model for feature extraction.
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     model_lm = AutoModelForCausalLM.from_pretrained(
         args.model_name,
@@ -42,7 +34,6 @@ def save_rewards(args):
     )
     model_lm.eval()
 
-    # Determine feature dimension using the first candidate containing reasoning steps.
     sample0 = None
     for sample in ds:
         if len(sample.get("steps", [])) > 0:
@@ -70,7 +61,6 @@ def save_rewards(args):
             feature_dim += hidden_states[layer].shape[-1]
     print(f"Reward model feature dimension: {feature_dim}")
 
-    # Load reward model from checkpoint.
     base_model = LinearRewardModel(feature_dim, disable_gate=args.disable_gate).to(device)
     if args.use_dim_reduction:
         dim_reduction = DimReduction(feature_dim, args.dim_reduction_dim).to(device)
@@ -83,12 +73,14 @@ def save_rewards(args):
     reward_model.eval()
     print(f"Loaded reward model from {args.reward_model_load}")
 
-    # Compute rewards for each candidate sample.
+    # Print parameter count for the reward model.
+    num_params = sum(p.numel() for p in reward_model.parameters())
+    print(f"Reward model parameter count: {num_params}")
+
     results = []
     total_time = 0.0
     for idx, sample in tqdm(enumerate(ds), total=len(ds), desc="Processing samples"):
         prompt = sample["prompt"]
-        # Extract detailed info for the reasoning path.
         detailed_info = extract_detailed_info_for_reasoning_path(
             prompt,
             sample.get("steps", []),
@@ -121,16 +113,13 @@ def save_rewards(args):
         start_time = time.time()
         if args.calc_mode == "prm":
             # PRM mode: Get raw reward for each step.
-            # We assume that reward_model supports reward_mode="all" to return
-            # a tensor of shape (1, num_steps) containing step-level rewards.
             step_rewards = reward_model(
                 token_features, [seq_len],
                 is_eval=True,
                 boundaries=[step_boundaries],
                 reward_mode="all"
             )
-            # Convert the tensor into a list.
-            step_rewards = step_rewards.squeeze(0).tolist()
+            step_rewards = step_rewards.tolist()
             result_entry["step_rewards"] = step_rewards
         elif args.calc_mode == "orm":
             # ORM mode: Get aggregated reward (a single number).
@@ -166,7 +155,10 @@ def main():
     parser.add_argument("--layers", type=int, nargs="+", default=None,
                         help="Hidden layer indices to extract; if not provided, extract all layers.")
     # Reward model arguments.
-    parser.add_argument("--reward_model_load", type=str, required=True,
+    parser.add_argument("--method", type=str, choices=["ce", "hinge", "dpo", "infonca", "nca"],
+                        default=None,
+                        help="Reward method to evaluate. If set, reward model checkpoints are automatically loaded from the default directory.")
+    parser.add_argument("--reward_model_load", type=str, default=None,
                         help="Path to a saved reward model checkpoint.")
     parser.add_argument("--calc_mode", type=str, choices=["prm", "orm"], required=True,
                         help="Calculation mode: 'prm' to save per-step rewards; 'orm' to save a single aggregated reward.")
@@ -181,9 +173,26 @@ def main():
     # Other parameters.
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed (default: 42).")
-    parser.add_argument("--output_file", type=str, required=True,
+    parser.add_argument("--output_file", type=str, default=None,
                         help="Path to the output JSON file to save computed rewards.")
     args = parser.parse_args()
+
+    if args.method is not None:
+        if args.reward_model_load:
+            raise ValueError("Either --method or --reward_model_load must be provided, not both.")
+
+        norm_part = "norm_" if args.apply_norm else ""
+        file_name = f"model/reward_model_{args.method}_{norm_part}{args.model_name.replace('/', '_')}.pt"
+        args.reward_model_load = file_name
+    else:
+        if args.reward_model_load is None:
+            raise ValueError("Either --method or --reward_model_load must be provided.")
+
+    if args.output_file is None:
+        if args.method:
+            args.output_file = os.path.splitext(args.dataset_file)[0] + f"_extracted_rewards_{args.method}.json"
+        else:
+            args.output_file = os.path.splitext(args.dataset_file)[0] + "_extracted_rewards.json"
 
     save_rewards(args)
 

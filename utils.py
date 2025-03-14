@@ -243,6 +243,8 @@ class LinearRewardModel(nn.Module):
                         aggregated = torch.mean(step_rewards_tensor)
                     elif reward_mode == "max":
                         aggregated = torch.max(step_rewards_tensor)
+                    elif reward_mode == "all":
+                        aggregated = step_rewards_tensor
                     else:
                         raise ValueError(f"Unsupported reward_mode: {reward_mode}")
                 agg_rewards.append(aggregated)
